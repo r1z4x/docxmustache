@@ -15,7 +15,6 @@ class DocxMustache
     public $local_path;
     public $storageDisk;
     public $storagePathPrefix;
-    public $useStoragePath = false;
     public $zipper;
     public $imageManipulation;
     public $verbose;
@@ -51,7 +50,8 @@ class DocxMustache
 
     public function Execute($dpi = 72)
     {
-        $this->CopyTmplate();
+        //$this->CopyTmplate();
+        $this->local_path = $this->GetTmpDir();
         $this->getAllFilesFromDocx();
         foreach ($this->filelist as $file) {
             $this->doInplaceMustache($file);
@@ -64,11 +64,7 @@ class DocxMustache
      */
     public function StoragePath($file)
     {
-        if ($this->useStoragePath) {
-            return \Storage::disk($this->storageDisk)->path($file);
-        }
-        $pathPrefix = \Storage::disk($this->storageDisk)->path(''); //\Storage::disk($this->storageDisk)->getDriver()->getAdapter()->getPathPrefix();
-        return $pathPrefix.$file;
+        return \Storage::disk($this->storageDisk)->path($file);
     }
 
     /**
@@ -86,25 +82,20 @@ class DocxMustache
     public function CleanUpTmpDirs()
     {
         $now = time();
-        $isExpired = ($now - (60 * 240));
+        $isExpired = ($now - (60 * 60));
         $disk = \Storage::disk($this->storageDisk);
-        $all_dirs = $disk->directories($this->storagePathPrefix.'DocxMustache');
+        $all_dirs = $disk->directories($this->storagePathPrefix);
         foreach ($all_dirs as $dir) {
-            //delete dirs older than 20min
-            if ($disk->lastModified($dir) < $isExpired) {
+            if (str_contains($dir, 'DocxMustache') && $disk->lastModified($dir) < $isExpired) {
                 $disk->deleteDirectory($dir);
-            }
+            }  
         }
     }
 
     public function GetTmpDir()
     {
         $this->CleanUpTmpDirs();
-        $pathPrefix = \Storage::disk($this->storageDisk)->path('');
-        $path = $this->storagePathPrefix.'DocxMustache'.uniqid($this->template_file).'/';
-        \Storage::makeDirectory($pathPrefix.$path);
-
-        return $path;
+        return $this->storagePathPrefix.'DocxMustache'.uniqid().'/';
     }
 
     public function getAllFilesFromDocx()
@@ -112,7 +103,7 @@ class DocxMustache
         $filelist = [];
         $fileWhitelist = $this->fileWhitelist;
         $this->zipper
-            ->make($this->StoragePath($this->local_path.$this->template_file_name))
+            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
             ->getRepository()->each(function ($file, $stats) use ($fileWhitelist, &$filelist) {
                 foreach ($fileWhitelist as $pattern) {
                     if (fnmatch($pattern, $file)) {
@@ -126,32 +117,26 @@ class DocxMustache
     public function doInplaceMustache($file)
     {
         $tempFileContent = $this->zipper
-                            ->make($this->StoragePath($this->local_path.$this->template_file_name))
+                            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
                             ->getFileContent($file);
+
         $tempFileContent = MustacheRender::render($this->items, $tempFileContent);
         $tempFileContent = HtmlConversion::convert($tempFileContent);
         $this->zipper->addString($file, $tempFileContent);
         $this->zipper->close();
     }
 
-    public function CopyTmplate()
+    protected function exctractOpenXmlFile()
     {
-        $this->Log('Get Copy of Template');
-        $this->local_path = $this->GetTmpDir();
-        \Storage::disk($this->storageDisk)->copy($this->storagePathPrefix.$this->template_file, $this->local_path.$this->template_file_name);
-    }
-
-    protected function exctractOpenXmlFile($file)
-    {
-        $pathPrefix = \Storage::disk($this->storageDisk)->path(''); // \Storage::disk($this->storageDisk)->getDriver()->getAdapter()->getPathPrefix();
         $this->zipper
-            ->make($pathPrefix.$this->local_path.$this->template_file_name)
-            ->extractTo($pathPrefix.$this->local_path, [$file], \WrkLst\Madzipper\Madzipper::WHITELIST);
+            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
+            ->extractTo(\Storage::disk($this->storageDisk)->path($this->local_path));
     }
 
     protected function ReadOpenXmlFile($file, $type = 'file')
     {
-        $this->exctractOpenXmlFile($file);
+        $this->exctractOpenXmlFile();
+
         if ($type == 'file') {
             if ($file_contents = \Storage::disk($this->storageDisk)->get($this->local_path.$file)) {
                 return $file_contents;
@@ -195,7 +180,7 @@ class DocxMustache
         $this->Log('Analyze Template');
         //get the main document out of the docx archive
         $this->word_doc = $this->ReadOpenXmlFile('word/document.xml', 'file');
-
+        
         $this->Log('Merge Data into Template');
 
         $this->word_doc = MustacheRender::render($this->items, $this->word_doc);

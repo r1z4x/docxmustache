@@ -50,12 +50,8 @@ class DocxMustache
 
     public function Execute($dpi = 72)
     {
-        //$this->CopyTmplate();
-        $this->local_path = $this->GetTmpDir();
+        $this->CopyTmplate();
         $this->getAllFilesFromDocx();
-        foreach ($this->filelist as $file) {
-            $this->doInplaceMustache($file);
-        }
         $this->ReadTeamplate($dpi);
     }
 
@@ -103,8 +99,9 @@ class DocxMustache
         $filelist = [];
         $fileWhitelist = $this->fileWhitelist;
         $this->zipper
-            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
+            ->make(\Storage::disk($this->storageDisk)->path($this->local_path.$this->template_file_name))
             ->getRepository()->each(function ($file, $stats) use ($fileWhitelist, &$filelist) {
+                
                 foreach ($fileWhitelist as $pattern) {
                     if (fnmatch($pattern, $file)) {
                         $filelist[] = $file;
@@ -114,29 +111,33 @@ class DocxMustache
         $this->filelist = $filelist;
     }
 
+    public function CopyTmplate()
+    {
+        $this->Log('Get Copy of Template');
+        $this->local_path = $this->GetTmpDir();
+        \Storage::disk($this->storageDisk)->copy($this->storagePathPrefix.$this->template_file, $this->local_path.$this->template_file_name);
+    }
+
     public function doInplaceMustache($file)
     {
         $tempFileContent = $this->zipper
-                            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
+                            ->make(\Storage::disk($this->storageDisk)->path($this->local_path.$this->template_file_name))
                             ->getFileContent($file);
 
         $tempFileContent = MustacheRender::render($this->items, $tempFileContent);
         $tempFileContent = HtmlConversion::convert($tempFileContent);
         $this->zipper->addString($file, $tempFileContent);
-        $this->zipper->close();
     }
 
     protected function exctractOpenXmlFile()
     {
         $this->zipper
-            ->make(\Storage::disk($this->storageDisk)->path($this->storagePathPrefix.$this->template_file))
+            ->make(\Storage::disk($this->storageDisk)->path($this->local_path.$this->template_file_name))
             ->extractTo(\Storage::disk($this->storageDisk)->path($this->local_path));
     }
 
     protected function ReadOpenXmlFile($file, $type = 'file')
     {
-        $this->exctractOpenXmlFile();
-
         if ($type == 'file') {
             if ($file_contents = \Storage::disk($this->storageDisk)->get($this->local_path.$file)) {
                 return $file_contents;
@@ -178,6 +179,13 @@ class DocxMustache
     public function ReadTeamplate($dpi)
     {
         $this->Log('Analyze Template');
+
+        $this->exctractOpenXmlFile();
+
+        foreach ($this->filelist as $file) {
+            $this->doInplaceMustache($file);
+        }
+
         //get the main document out of the docx archive
         $this->word_doc = $this->ReadOpenXmlFile('word/document.xml', 'file');
         

@@ -82,7 +82,7 @@ class DocxMustache
         $disk = \Storage::disk($this->storageDisk);
         $all_dirs = $disk->directories($this->storagePathPrefix);
         foreach ($all_dirs as $dir) {
-            if (str_contains($dir, 'DocxMustache') && $disk->lastModified($dir) < $isExpired) {
+            if (str_contains($dir, 'DocxMustache') && is_dir($dir) && $disk->lastModified($dir) < $isExpired) {
                 $disk->deleteDirectory($dir);
             }  
         }
@@ -124,7 +124,7 @@ class DocxMustache
                             ->make(\Storage::disk($this->storageDisk)->path($this->local_path.$this->template_file_name))
                             ->getFileContent($file);
 
-        $tempFileContent = MustacheRender::render($this->items, $tempFileContent);
+        $tempFileContent = MustacheRender::render($this->items, $tempFileContent, false);
         $tempFileContent = HtmlConversion::convert($tempFileContent);
         $this->zipper->addString($file, $tempFileContent);
     }
@@ -151,6 +151,8 @@ class DocxMustache
                 throw new Exception('Cannot load XML Object from file '.$file);
             }
         }
+
+        return '';
     }
 
     protected function SaveOpenXmlFile($file, $folder, $content)
@@ -191,11 +193,11 @@ class DocxMustache
         
         $this->Log('Merge Data into Template');
 
-        $this->word_doc = MustacheRender::render($this->items, $this->word_doc);
+        $this->word_doc = MustacheRender::render($this->items, $this->word_doc, false);
 
-        $this->word_doc = HtmlConversion::convert($this->word_doc);
+        //$this->word_doc = HtmlConversion::convert($this->word_doc);
 
-        $this->ImageReplacer($dpi);
+        //$this->ImageReplacer($dpi);
 
         $this->Log('Compact Template with Data');
 

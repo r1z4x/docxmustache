@@ -4,16 +4,18 @@ namespace WrkLst\DocxMustache;
 
 class MustacheRender
 {
-    public static function Render($items, $mustache_template, $clean_tags = true)
+    public static function Render($items, $mustache_template, $clean_tags = true, $filters = [])
     {
         if ($clean_tags) {
             $mustache_template = self::TagCleaner($mustache_template);
         }
 
-        $m = new \Mustache_Engine(['escape' => function ($value) {
+        $m = new \Mustache_Engine([
+            'helpers' => $filters, 
+            'pragmas' => [\Mustache_Engine::PRAGMA_FILTERS],
+            'escape' => function ($value) {
             if (str_replace('*[[DONOTESCAPE]]*', '', $value) != $value) {
                 $value = str_replace('&', '&amp;', $value);
-
                 return str_replace('*[[DONOTESCAPE]]*', '', $value);
             }
 

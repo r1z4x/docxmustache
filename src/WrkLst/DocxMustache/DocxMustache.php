@@ -18,6 +18,7 @@ class DocxMustache
     public $zipper;
     public $imageManipulation;
     public $verbose;
+    public $filters;
 
     private $filelist;
     private $fileWhitelist = [
@@ -46,6 +47,8 @@ class DocxMustache
         $this->imageManipulation = $imageManipulation; //'&w=1800';
 
         $this->verbose = false;
+
+        $this->filters = [];
     }
 
     public function Execute($dpi = 72)
@@ -124,7 +127,7 @@ class DocxMustache
                             ->make(\Storage::disk($this->storageDisk)->path($this->local_path.$this->template_file_name))
                             ->getFileContent($file);
 
-        $tempFileContent = MustacheRender::render($this->items, $tempFileContent, false);
+        $tempFileContent = MustacheRender::render($this->items, $tempFileContent, false, $this->filters);
         $tempFileContent = HtmlConversion::convert($tempFileContent);
         $this->zipper->addString($file, $tempFileContent);
     }
@@ -193,9 +196,9 @@ class DocxMustache
         
         $this->Log('Merge Data into Template');
 
-        $this->word_doc = MustacheRender::render($this->items, $this->word_doc, false);
+        $this->word_doc = MustacheRender::render($this->items, $this->word_doc, false, $this->filters);
 
-        //$this->word_doc = HtmlConversion::convert($this->word_doc);
+        //$this->word_doc = HtmlConversion::convert($this->word_doc); TODO: Bunları kontrol et.
 
         //$this->ImageReplacer($dpi);
 
